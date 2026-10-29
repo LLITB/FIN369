@@ -1,0 +1,456 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Cash Flow Ratio Scanner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@700&display=swap">
+<style>
+/* Layout: neon terminal in the rain — header band, then two "frames": cash flow data frame (left) and ratio readout (right), stacking on phones. Single dark look by design. */
+:root{
+  --bg:#05080b;
+  --panel:#0a1217;
+  --panel-2:#0e1a20;
+  --line:#1d3a44;
+  --fg:#cfe3e6;
+  --muted:#6f8f96;
+  --amber:#ff9a3c;
+  --amber-dim:#7a4718;
+  --cyan:#3ee6f0;
+  --magenta:#ff3d7f;
+  --ok:#5cf2a6;
+  --warn:#ffd23c;
+  --bad:#ff4d5e;
+  --display:"Chakra Petch", "Eurostile", "Arial Narrow", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --jp:"Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg)}
+body{
+  font-family:var(--mono);font-size:14px;line-height:1.5;min-height:100vh;
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(255,154,60,.16), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(62,230,240,.10), transparent 60%),
+    var(--bg);
+}
+#rain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;opacity:.55}
+.scan{position:fixed;inset:0;pointer-events:none;z-index:1;
+  background:repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0 1px, transparent 1px 3px)}
+.wrap{position:relative;z-index:2;max-width:1320px;margin:0 auto;
+  padding-block:28px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  display:flex;flex-direction:column;gap:22px}
+
+/* Header */
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;
+  border-bottom:1px solid var(--line);padding-bottom:18px}
+.brand{display:flex;gap:16px;align-items:stretch;min-width:0}
+.kanji{font-family:var(--jp);writing-mode:vertical-rl;color:var(--magenta);font-size:15px;letter-spacing:.2em;
+  text-shadow:0 0 10px rgba(255,61,127,.7);border-left:2px solid var(--magenta);padding-left:6px}
+.eyebrow{font-family:var(--display);color:var(--cyan);letter-spacing:.32em;font-size:11px;text-transform:uppercase}
+h1{font-family:var(--display);font-weight:700;margin:4px 0 2px;font-size:clamp(28px,4.6vw,52px);line-height:1;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--amber);text-wrap:balance;
+  text-shadow:0 0 18px rgba(255,154,60,.55), 0 0 2px rgba(255,200,140,.9)}
+.sub{color:var(--muted);font-size:12.5px;max-width:62ch}
+.status{font-size:11px;color:var(--muted);text-align:right;letter-spacing:.08em;text-transform:uppercase;
+  display:flex;flex-direction:column;gap:3px}
+.status b{color:var(--cyan);font-weight:500}
+.blink{display:inline-block;width:8px;height:8px;background:var(--ok);border-radius:50%;margin-right:6px;
+  box-shadow:0 0 8px var(--ok);animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.25}}
+
+/* Frames */
+.grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:minmax(0,1fr)}}
+.frame{position:relative;background:linear-gradient(180deg,var(--panel-2),var(--panel));
+  border:1px solid var(--line);min-width:0;
+  clip-path:polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px))}
+.frame::before{content:"";position:absolute;inset:0;pointer-events:none;
+  box-shadow:inset 0 0 0 1px rgba(62,230,240,.06), inset 0 0 60px rgba(62,230,240,.04)}
+.frame-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+  padding:14px 18px;border-bottom:1px solid var(--line);background:rgba(255,154,60,.04)}
+.frame-title{font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.2em;text-transform:uppercase;color:var(--fg)}
+.frame-title span{color:var(--amber)}
+.frame-tag{font-size:10.5px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase}
+.frame-body{padding:14px 18px 20px;display:flex;flex-direction:column;gap:14px}
+
+/* Profile strip */
+.profile{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.pf{border:1px dashed var(--line);padding:8px 10px}
+.pf small{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.pf div{font-size:13.5px;color:var(--cyan)}
+
+/* Data frame table */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:520px}
+thead th{position:sticky;top:0;background:#0b161b;font-family:var(--display);font-weight:600;font-size:11px;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--amber);text-align:left;padding:9px 10px;border-bottom:1px solid var(--amber-dim)}
+th.num,td.num{text-align:right}
+td{padding:5px 10px;border-bottom:1px solid rgba(29,58,68,.6);vertical-align:middle}
+td.idx{color:#3c5a61;font-size:11px;width:34px}
+tr.sec td{background:rgba(62,230,240,.06);color:var(--cyan);font-family:var(--display);font-weight:600;
+  letter-spacing:.2em;font-size:11px;text-transform:uppercase;padding:8px 10px}
+tr.calc td{color:var(--amber);font-weight:600;background:rgba(255,154,60,.05)}
+tr:not(.sec):not(.calc):hover td{background:rgba(255,255,255,.02)}
+.tagc{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+input.amt{width:110px;background:transparent;border:1px solid transparent;color:var(--fg);font:inherit;
+  font-variant-numeric:tabular-nums;text-align:right;padding:3px 6px}
+input.amt:hover{border-color:var(--line)}
+input.amt:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 2px rgba(62,230,240,.2);background:rgba(62,230,240,.05)}
+.hint{font-size:11.5px;color:var(--muted)}
+
+/* Buttons */
+.actions{display:flex;flex-wrap:wrap;gap:12px}
+button{font-family:var(--display);font-weight:700;letter-spacing:.22em;text-transform:uppercase;font-size:13px;
+  cursor:pointer;padding:12px 20px;border:1px solid var(--amber);color:var(--bg);background:var(--amber);
+  clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  box-shadow:0 0 20px rgba(255,154,60,.35);transition:transform .12s, box-shadow .2s, background .2s}
+button:hover{background:#ffb26a;box-shadow:0 0 32px rgba(255,154,60,.6)}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+button.ghost{background:transparent;color:var(--cyan);border-color:var(--cyan);box-shadow:none}
+button.ghost:hover{background:rgba(62,230,240,.1)}
+
+/* Results */
+.idle{border:1px dashed var(--line);padding:28px 18px;text-align:center;color:var(--muted);display:flex;flex-direction:column;gap:10px;align-items:center}
+.eye{width:86px;height:86px;border-radius:50%;position:relative;
+  background:radial-gradient(circle at 50% 50%, #000 0 14%, var(--amber) 15% 22%, #3a1d08 23% 46%, transparent 47%),
+             radial-gradient(circle, rgba(255,154,60,.25), transparent 70%);
+  box-shadow:0 0 30px rgba(255,154,60,.35)}
+.summary{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center;border:1px solid var(--line);padding:14px 16px;
+  background:rgba(255,154,60,.04)}
+.score{font-family:var(--display);font-weight:700;font-size:44px;line-height:1;color:var(--amber);text-shadow:0 0 16px rgba(255,154,60,.5)}
+.score small{font-size:16px;color:var(--muted)}
+.verdict{font-size:12.5px;color:var(--fg)}
+.verdict b{font-family:var(--display);letter-spacing:.18em;text-transform:uppercase;display:block;color:var(--cyan);font-size:12px;margin-bottom:2px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{border:1px solid var(--line);background:rgba(5,8,11,.6);padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;
+  position:relative;opacity:1;animation:boot .5s ease both}
+.card[data-s="pass"]{border-color:rgba(92,242,166,.35)}
+.card[data-s="watch"]{border-color:rgba(255,210,60,.35)}
+.card[data-s="fail"]{border-color:rgba(255,77,94,.45)}
+@keyframes boot{from{filter:brightness(2.2) blur(1px)}to{filter:none}}
+.c-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.c-name{font-family:var(--display);font-weight:600;letter-spacing:.12em;text-transform:uppercase;font-size:13px}
+.chip{font-family:var(--display);font-weight:700;font-size:10px;letter-spacing:.2em;padding:3px 7px;border:1px solid currentColor;white-space:nowrap}
+.chip.pass{color:var(--ok)} .chip.watch{color:var(--warn)} .chip.fail{color:var(--bad)}
+.c-val{font-family:var(--display);font-weight:700;font-size:30px;line-height:1;color:var(--fg);font-variant-numeric:tabular-nums}
+.c-val small{font-size:13px;color:var(--muted);font-weight:400;margin-left:4px}
+.gauge{height:6px;background:#0f2026;position:relative;overflow:hidden}
+.gauge i{position:absolute;inset:0 auto 0 0;display:block}
+.gauge .tgt{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+.c-meta{font-size:11.5px;color:var(--muted);display:flex;flex-direction:column;gap:3px}
+.c-meta code{font-family:var(--mono);color:#9fc3c8}
+.c-meta .bm{color:var(--cyan)}
+.note{font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+footer{font-size:11px;color:var(--muted);letter-spacing:.06em;text-align:center}
+@media (max-width:520px){ .status{text-align:left} .summary{grid-template-columns:1fr} }
+@media (prefers-reduced-motion:reduce){ .blink,.card{animation:none} #rain{display:none} }
+</style>
+
+<canvas id="rain" aria-hidden="true"></canvas>
+<div class="scan" aria-hidden="true"></div>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="kanji" aria-hidden="true">財務分析</div>
+      <div>
+        <div class="eyebrow">Personal Financial Statement Diagnostic · Unit 2049</div>
+        <h1>Cash Flow Ratio Scanner</h1>
+        <div class="sub">Generates a typical individual's monthly cash flow and balance sheet snapshot. Edit any amount, then run the analysis to compute standard financial planning ratios against common benchmarks.</div>
+      </div>
+    </div>
+    <div class="status">
+      <div><span class="blink"></span>System online</div>
+      <div>Subject ID <b id="subjectId">—</b></div>
+      <div>Scan date <b id="scanDate">—</b></div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- FRAME 1: CASH FLOW DATA FRAME -->
+    <section class="frame" aria-labelledby="f1">
+      <div class="frame-head">
+        <div class="frame-title" id="f1"><span>01 /</span> Monthly Cash Flow</div>
+        <div class="frame-tag">Data frame · <span id="rowCount">0</span> rows · USD</div>
+      </div>
+      <div class="frame-body">
+        <div class="profile" id="profile"></div>
+        <div class="tbl-wrap">
+          <table aria-label="Monthly cash flow data frame">
+            <thead><tr><th>#</th><th>Line item</th><th>Class</th><th class="num">Monthly</th><th class="num">Annual</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="hint">Sample figures are randomly generated examples, not real client data. Amounts are editable; net take-home and totals recalculate as you type.</div>
+        <form class="actions" id="form">
+          <button type="submit" id="submitBtn">Submit · Run analysis</button>
+          <button type="button" class="ghost" id="newBtn">Generate new subject</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- FRAME 2: RATIOS -->
+    <section class="frame" aria-labelledby="f2" aria-live="polite">
+      <div class="frame-head">
+        <div class="frame-title" id="f2"><span>02 /</span> Financial Planning Ratios</div>
+        <div class="frame-tag" id="ratioTag">Awaiting submit</div>
+      </div>
+      <div class="frame-body" id="results">
+        <div class="idle">
+          <div class="eye" aria-hidden="true"></div>
+          <div>No analysis yet. Press <b style="color:var(--amber)">Submit · Run analysis</b> to evaluate the cash flow in frame 01.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>Benchmarks reflect common undergraduate CFP® curriculum guidelines. For education and illustration only.</footer>
+</div>
+
+<script>
+(function(){
+const $ = s => document.querySelector(s);
+const usd = n => (n<0?"-":"") + "$" + Math.abs(Math.round(n)).toLocaleString("en-US");
+const r = (a,b) => a + Math.random()*(b-a);
+const ri = (a,b) => Math.round(r(a,b));
+const round5 = n => Math.round(n/5)*5;
+
+/* Row classes drive the ratio math:
+   gross, side            -> income
+   tax, fica, def, prem   -> payroll deductions (def = employee retirement deferral)
+   match                  -> employer contribution (savings, not cash)
+   housing                -> rent / mortgage PITI
+   fixed, variable        -> non-discretionary living costs
+   disc                   -> discretionary living costs
+   debt                   -> non-housing debt payments
+   save                   -> after-tax savings
+   cash                   -> cash & cash equivalents (balance)
+   cl                     -> current liabilities, due within 12 months (balance) */
+const CLASS_LABEL = {gross:"Income",side:"Income",tax:"Deduction",fica:"Deduction",def:"Savings · pre-tax",prem:"Deduction",
+  match:"Savings · employer",housing:"Housing",fixed:"Fixed",variable:"Variable",disc:"Discretionary",debt:"Debt pmt",
+  save:"Savings",cash:"Cash equiv.",cl:"Current liab."};
+
+let rows = [];
+let profile = {};
+
+function generate(){
+  const ages=[24,27,29,31,34,36,39,42,45,48,52,55,58];
+  const jobs=["Registered nurse","Software tester","Teacher","Electrician","Account manager","Paralegal","Logistics analyst","Dental hygienist","Marketing coordinator","Civil engineer","Pharmacy tech","Sales rep"];
+  const annual = round5(r(38000,165000));
+  const g = annual/12;
+  const owns = Math.random() < (annual>75000?0.65:0.35);
+  const sideOn = Math.random()<0.35;
+  const side = sideOn ? round5(r(150,1200)) : 0;
+  const taxRate = annual<50000?r(.08,.12):annual<100000?r(.12,.17):r(.17,.23);
+  const defPct = Math.random()<0.2 ? 0 : r(.02,.10);
+  const matchPct = defPct>0 ? Math.min(defPct, r(.02,.05)) : 0;
+  const housingPct = r(.18,.38);
+  const hasCar = Math.random()<0.7, hasStudent = Math.random()<0.5;
+  const ccBal = Math.random()<0.6 ? round5(r(300,9500)) : 0;
+  const cashMonthsTarget = r(0.3,7.5);
+
+  profile = {
+    id: "N" + ri(10,99) + "-" + Math.random().toString(16).slice(2,6).toUpperCase(),
+    age: ages[ri(0,ages.length-1)],
+    job: jobs[ri(0,jobs.length-1)],
+    status: Math.random()<0.5?"Single":"Married, one earner",
+    housing: owns?"Homeowner":"Renter"
+  };
+
+  const housing = round5(g*housingPct);
+  const R = [];
+  const add=(sec,name,cls,amt)=>R.push({sec,name,cls,amt:Math.max(0,Math.round(amt))});
+  add("Income","Gross salary","gross",g);
+  add("Income","Side / freelance income","side",side);
+  add("Payroll deductions","Federal & state income tax","tax",(g+side)*taxRate);
+  add("Payroll deductions","FICA (Social Security + Medicare)","fica",g*0.0765 + side*0.1413);
+  add("Payroll deductions","401(k) employee deferral","def",g*defPct);
+  add("Payroll deductions","Health insurance premium","prem",round5(r(60,320)));
+  add("Employer","401(k) employer match","match",g*matchPct);
+  add("Housing", owns?"Mortgage P&I":"Rent","housing",owns?housing*0.78:housing*0.96);
+  add("Housing", owns?"Property tax & homeowners insurance":"Renters insurance","housing",owns?housing*0.22:housing*0.04);
+  add("Living expenses","Utilities","fixed",round5(r(110,340)));
+  add("Living expenses","Phone & internet","fixed",round5(r(80,210)));
+  add("Living expenses","Auto insurance","fixed",hasCar?round5(r(90,240)):0);
+  add("Living expenses","Life & disability insurance","fixed",Math.random()<0.55?round5(r(25,140)):0);
+  add("Living expenses","Groceries","variable",round5(r(280,820)));
+  add("Living expenses", hasCar?"Fuel & auto maintenance":"Transit pass","variable",hasCar?round5(r(120,360)):round5(r(60,130)));
+  add("Living expenses","Medical copays & prescriptions","variable",round5(r(15,160)));
+  add("Living expenses","Dining & entertainment","disc",round5(r(120,700)));
+  add("Living expenses","Clothing & personal care","disc",round5(r(60,320)));
+  add("Living expenses","Subscriptions & memberships","disc",round5(r(20,140)));
+  add("Debt payments","Auto loan payment","debt",hasCar&&Math.random()<0.65?round5(r(260,640)):0);
+  add("Debt payments","Student loan payment","debt",hasStudent?round5(r(150,560)):0);
+  add("Debt payments","Credit card payment","debt",ccBal?Math.max(35,ccBal*r(.025,.08)):0);
+  add("Savings","Emergency fund deposit","save",Math.random()<0.6?round5(r(50,600)):0);
+  add("Savings","Roth IRA contribution","save",Math.random()<0.4?round5(r(100,583)):0);
+
+  // balance sheet snapshot sized against non-discretionary spend
+  const nd = R.filter(x=>["housing","fixed","variable","debt"].includes(x.cls)).reduce((s,x)=>s+x.amt,0);
+  const cash = nd*cashMonthsTarget;
+  add("Cash & equivalents (balance)","Checking account","cash",round5(Math.min(cash*r(.25,.6), cash)));
+  const checking = R[R.length-1].amt;
+  add("Cash & equivalents (balance)","Savings / money market","cash",round5(Math.max(0,cash-checking)));
+  add("Current liabilities (balance)","Credit card balance","cl",ccBal);
+  add("Current liabilities (balance)","Medical & other bills due","cl",Math.random()<0.4?round5(r(150,2400)):0);
+  const autoPmt = R.find(x=>x.name==="Auto loan payment").amt;
+  add("Current liabilities (balance)","Auto loan principal due in 12 months","cl",autoPmt?autoPmt*12*r(.7,.85):0);
+  rows = R;
+}
+
+function totals(){
+  const s = c => rows.filter(x=>[].concat(c).includes(x.cls)).reduce((a,x)=>a+(+x.amt||0),0);
+  const gross = s(["gross","side"]);
+  const deductions = s(["tax","fica","def","prem"]);
+  const net = gross - deductions;
+  const housing = s("housing"), fixed=s("fixed"), variable=s("variable"), disc=s("disc"), debt=s("debt"), save=s("save");
+  const living = housing+fixed+variable+disc;
+  const outflow = living + debt + save;
+  return {gross,deductions,net,housing,fixed,variable,disc,debt,save,living,outflow,
+    surplus: net - outflow, def:s("def"), match:s("match"), cash:s("cash"), cl:s("cl"),
+    nonDisc: housing+fixed+variable+debt};
+}
+
+function render(){
+  const tb = $("#tbody"); tb.innerHTML = "";
+  let lastSec = null, i = 0;
+  const calcRow = (label, val, id) => {
+    const tr=document.createElement("tr"); tr.className="calc";
+    tr.innerHTML=`<td class="idx">Σ</td><td>${label}</td><td class="tagc">Computed</td><td class="num" id="${id}m">${usd(val)}</td><td class="num" id="${id}a">${usd(val*12)}</td>`;
+    tb.appendChild(tr);
+  };
+  rows.forEach((row,k)=>{
+    if(row.sec!==lastSec){
+      if(lastSec==="Payroll deductions") calcRow("Net take-home pay", totals().net, "net");
+      if(lastSec==="Savings") calcRow("Monthly surplus / (deficit)", totals().surplus, "sur");
+      const tr=document.createElement("tr"); tr.className="sec";
+      tr.innerHTML=`<td colspan="5">${row.sec}</td>`; tb.appendChild(tr); lastSec=row.sec;
+    }
+    const isBal = row.cls==="cash"||row.cls==="cl";
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td class="idx">${String(++i).padStart(2,"0")}</td><td>${row.name}</td><td class="tagc">${CLASS_LABEL[row.cls]}</td>
+      <td class="num"><input class="amt" id="amt-${k}" inputmode="decimal" aria-label="${row.name} ${isBal?"balance":"monthly amount"}" value="${row.amt}"></td>
+      <td class="num" id="ann-${k}">${isBal?"<span class='tagc'>balance</span>":usd(row.amt*12)}</td>`;
+    tb.appendChild(tr);
+  });
+  $("#rowCount").textContent = rows.length;
+  tb.querySelectorAll("input.amt").forEach(inp=>{
+    inp.addEventListener("input",()=>{
+      const k=+inp.id.split("-")[1];
+      const v=parseFloat(inp.value.replace(/[$,\s]/g,""));
+      rows[k].amt = isFinite(v)&&v>=0 ? v : 0;
+      const isBal = rows[k].cls==="cash"||rows[k].cls==="cl";
+      if(!isBal) $("#ann-"+k).textContent = usd(rows[k].amt*12);
+      refreshCalc();
+    });
+  });
+  const p=profile;
+  $("#profile").innerHTML = [["Subject",p.id],["Age",p.age],["Occupation",p.job],["Household",p.status],["Housing",p.housing]]
+    .map(([a,b])=>`<div class="pf"><small>${a}</small><div>${b}</div></div>`).join("");
+  $("#subjectId").textContent = p.id;
+}
+function refreshCalc(){
+  const t=totals();
+  [["net",t.net],["sur",t.surplus]].forEach(([id,v])=>{
+    const m=$("#"+id+"m"), a=$("#"+id+"a"); if(m){m.textContent=usd(v);a.textContent=usd(v*12);}
+  });
+}
+
+/* Ratio definitions: value fn, display format, status test, gauge scale, target marker */
+function analyze(){
+  const t = totals();
+  const div=(a,b)=> b>0 ? a/b : (a>0?Infinity:0);
+  const pct = v => isFinite(v)?(v*100).toFixed(1):"∞";
+  const R = [
+    {name:"Emergency fund ratio", v:div(t.cash,t.nonDisc), unit:"months", fmt:v=>isFinite(v)?v.toFixed(1):"∞",
+      formula:"Cash & equivalents ÷ monthly non-discretionary expenses", bench:"3–6 months of expenses",
+      calc:`${usd(t.cash)} ÷ ${usd(t.nonDisc)}`,
+      s:v=>v>=3?"pass":v>=1.5?"watch":"fail", max:9, tgt:3},
+    {name:"Current ratio", v:div(t.cash,t.cl), unit:"×", fmt:v=>isFinite(v)?v.toFixed(2):"No CL",
+      formula:"Cash & equivalents ÷ current liabilities", bench:"> 1.0 (2.0+ preferred)",
+      calc:`${usd(t.cash)} ÷ ${usd(t.cl)}`,
+      s:v=>v>=1?"pass":v>=0.75?"watch":"fail", max:4, tgt:1},
+    {name:"Savings ratio", v:div(t.def+t.match+t.save,t.gross), unit:"% of gross", fmt:pct,
+      formula:"(Employee + employer retirement + after-tax savings) ÷ gross income", bench:"10–13% or more",
+      calc:`${usd(t.def+t.match+t.save)} ÷ ${usd(t.gross)}`,
+      s:v=>v>=.10?"pass":v>=.05?"watch":"fail", max:.25, tgt:.10},
+    {name:"Housing ratio 1", v:div(t.housing,t.gross), unit:"% of gross", fmt:pct,
+      formula:"Housing costs (P&I, taxes, insurance or rent) ÷ gross income", bench:"≤ 28%",
+      calc:`${usd(t.housing)} ÷ ${usd(t.gross)}`,
+      s:v=>v<=.28?"pass":v<=.33?"watch":"fail", max:.5, tgt:.28, lower:true},
+    {name:"Housing ratio 2", v:div(t.housing+t.debt,t.gross), unit:"% of gross", fmt:pct,
+      formula:"(Housing costs + all other debt payments) ÷ gross income", bench:"≤ 36%",
+      calc:`${usd(t.housing+t.debt)} ÷ ${usd(t.gross)}`,
+      s:v=>v<=.36?"pass":v<=.43?"watch":"fail", max:.6, tgt:.36, lower:true},
+    {name:"Debt-to-income ratio", v:div(t.debt,t.net), unit:"% of take-home", fmt:pct,
+      formula:"Non-housing debt payments ÷ net take-home pay", bench:"≤ 20%",
+      calc:`${usd(t.debt)} ÷ ${usd(t.net)}`,
+      s:v=>v<=.20?"pass":v<=.30?"watch":"fail", max:.45, tgt:.20, lower:true},
+    {name:"Income coverage ratio", v:div(t.net,t.outflow), unit:"×", fmt:v=>isFinite(v)?v.toFixed(2):"∞",
+      formula:"Net take-home pay ÷ total monthly outflows (living + debt + savings)", bench:"≥ 1.0 (income covers spending)",
+      calc:`${usd(t.net)} ÷ ${usd(t.outflow)}`,
+      s:v=>v>=1.05?"pass":v>=1?"watch":"fail", max:1.6, tgt:1},
+    {name:"Discretionary income ratio", v:div(t.surplus+t.disc,t.net), unit:"% of take-home", fmt:pct,
+      formula:"(Surplus + discretionary spending) ÷ net take-home pay", bench:"≥ 10% flexible cash flow",
+      calc:`${usd(t.surplus+t.disc)} ÷ ${usd(t.net)}`,
+      s:v=>v>=.10?"pass":v>=.05?"watch":"fail", max:.5, tgt:.10},
+  ];
+  const col={pass:"var(--ok)",watch:"var(--warn)",fail:"var(--bad)"};
+  const lbl={pass:"Pass",watch:"Watch",fail:"Flag"};
+  let passes=0;
+  const cards = R.map((x,i)=>{
+    const st=x.s(x.v); if(st==="pass") passes++;
+    const w=Math.max(0,Math.min(100, (isFinite(x.v)?x.v:x.max)/x.max*100));
+    const tg=Math.min(100,x.tgt/x.max*100);
+    return `<div class="card" data-s="${st}" style="animation-delay:${i*70}ms">
+      <div class="c-top"><div class="c-name">${x.name}</div><span class="chip ${st}">${lbl[st]}</span></div>
+      <div class="c-val">${x.fmt(x.v)}<small>${x.unit}</small></div>
+      <div class="gauge" role="img" aria-label="${x.name} gauge"><i style="width:${w}%;background:${col[st]};box-shadow:0 0 8px ${col[st]}"></i><span class="tgt" style="left:calc(${tg}% - 1px)"></span></div>
+      <div class="c-meta"><span><code>${x.formula}</code></span><span>${x.calc}</span><span class="bm">Benchmark: ${x.bench}</span></div>
+    </div>`;
+  }).join("");
+  const fails = R.filter(x=>x.s(x.v)==="fail").map(x=>x.name.toLowerCase());
+  const verdict = passes===R.length ? ["Stable","All ratios within benchmark ranges."]
+    : fails.length===0 ? ["Mostly stable","No ratios flagged; some sit near the edge of their benchmark."]
+    : fails.length<=2 ? ["Needs attention","Flagged: "+fails.join(", ")+"."]
+    : ["At risk","Multiple flags: "+fails.join(", ")+". Review spending, debt and liquidity."];
+  $("#results").innerHTML = `
+    <div class="summary">
+      <div class="score">${passes}<small>/${R.length}</small></div>
+      <div class="verdict"><b>${verdict[0]}</b>${verdict[1]}<br><span style="color:var(--muted)">Net take-home ${usd(t.net)}/mo · Surplus ${usd(t.surplus)}/mo · Gross ${usd(t.gross*12)}/yr</span></div>
+    </div>
+    <div class="cards">${cards}</div>
+    <div class="note">Gauge bar shows the computed value; the cyan tick marks the benchmark threshold. Pass, Watch and Flag use common planning guidelines; lenders and textbooks vary slightly.</div>`;
+  $("#ratioTag").textContent = "Scan " + new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+
+$("#form").addEventListener("submit",e=>{e.preventDefault();analyze();});
+$("#newBtn").addEventListener("click",()=>{generate();render();
+  $("#results").innerHTML=`<div class="idle"><div class="eye" aria-hidden="true"></div><div>New subject loaded. Press <b style="color:var(--amber)">Submit · Run analysis</b> to evaluate.</div></div>`;
+  $("#ratioTag").textContent="Awaiting submit";});
+$("#scanDate").textContent = new Date().toLocaleDateString("en-US",{year:"numeric",month:"short",day:"2-digit"});
+
+generate(); render();
+
+/* Ambient rain */
+const cv=$("#rain"), ctx=cv.getContext("2d");
+const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let drops=[], W=0, H=0;
+function size(){W=cv.width=innerWidth;H=cv.height=innerHeight;
+  drops=Array.from({length:Math.round(W*H/9000)},()=>({x:Math.random()*W,y:Math.random()*H,l:r(8,22),v:r(6,14)}));}
+function tick(){
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle="rgba(140,210,220,.28)";ctx.lineWidth=1;ctx.beginPath();
+  for(const d of drops){ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-d.l*.18,d.y+d.l);
+    d.y+=d.v; d.x-=d.v*.18; if(d.y>H){d.y=-20;d.x=Math.random()*W*1.1;}}
+  ctx.stroke(); requestAnimationFrame(tick);
+}
+if(!reduce){size();addEventListener("resize",size);tick();}
+})();
+</script>
+
+</body></html>
